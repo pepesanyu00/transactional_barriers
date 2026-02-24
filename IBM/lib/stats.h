@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #ifndef STATS_H_
 #define STATS_H_
 
@@ -14,32 +23,32 @@
 #include "barriers.h"
 
 
-// MACROS DEFINIDAS EN BARRIERS.H
+// MACROS DEFINED IN BARRIERS.H
 //#define CACHE_BLOCK_SIZE 64
 //#define LOCK_TAKEN 0xFF
 
-// Estructura para guardar las estadísticas
+// Structure to save statistics
 struct Stats {
-  char pad1[CACHE_BLOCK_SIZE];//Pads para que no haya tráfico que no coincidan xabortCount de un thread con xcommitCount the otro en un bloque cache
-  unsigned long int xabortCount; //Número total de abortos
-  unsigned long int explicitAborts; //Número de llamadas a XABORT en el código
-  unsigned long int explicitAbortsSubs; //Número de abortos explícitos por subscripción de lock
-  unsigned long int explicitAbortsAddPath; //Número de abortos explícitos por subscripción de lock
-  unsigned long int persistentAborts; //Abortos para los que el hardware piensa que debemos reintentar
-  unsigned long int disallowedAborts; //Abortos por conflicto
-  unsigned long int nestingAborts; //Abortos por capacidad
-  unsigned long int footprintAborts; //Abortos por capacidad
-  unsigned long int selfInducedAborts; //Abortos por breakpoint de debugger
-  unsigned long int nontransactAborts; //Abortos dentro de una transacción anidada
-  unsigned long int transactAborts; //Abortos con eax = 0
-  unsigned long int tlbAborts; //Abortos con eax = 0
-  unsigned long int implementationAborts; //Abortos con eax = 0
-  unsigned long int fetchAborts; //Abortos con eax = 0
-  unsigned long int otherAborts; //deberian ser 0
-  unsigned long int xcommitCount; //Número de commits
-  unsigned long int fallbackCount; //Número de fallbacks
-  unsigned long int retryCCount; //Número de retries de las commitan
-  unsigned long int retryFCount; //Número de retries de las entran en fallback
+  char pad1[CACHE_BLOCK_SIZE]; // Pads to avoid conflicting traffic between xabortCount of one thread and xcommitCount of another in a cache block
+  unsigned long int xabortCount; // Total number of aborts
+  unsigned long int explicitAborts; // Number of XABORT calls in the code
+  unsigned long int explicitAbortsSubs; // Number of explicit aborts due to lock subscription
+  unsigned long int explicitAbortsAddPath; // Number of explicit aborts due to lock subscription
+  unsigned long int persistentAborts; // Aborts for which the hardware assumes we should retry
+  unsigned long int disallowedAborts; // Conflict aborts
+  unsigned long int nestingAborts; // Capacity aborts
+  unsigned long int footprintAborts; // Capacity aborts
+  unsigned long int selfInducedAborts; // Aborts caused by a debugger breakpoint
+  unsigned long int nontransactAborts; // Aborts inside a nested transaction
+  unsigned long int transactAborts; // Aborts with eax = 0
+  unsigned long int tlbAborts; // Aborts with eax = 0
+  unsigned long int implementationAborts; // Aborts with eax = 0
+  unsigned long int fetchAborts; // Aborts with eax = 0
+  unsigned long int otherAborts; // Should be 0
+  unsigned long int xcommitCount; // Number of commits
+  unsigned long int fallbackCount; // Number of fallbacks
+  unsigned long int retryCCount; // Number of retries for those that commit
+  unsigned long int retryFCount; // Number of retries for those that enter fallback
   char pad2[CACHE_BLOCK_SIZE];
 };
 
@@ -49,7 +58,7 @@ int statsFileInit(int argc, char **argv, long thCount);
 int dumpStats(float time, int ver);
 
 
-// Funciones de profile de estadísticas (hechas inline para mejorar el rendimiento)
+// Statistics profiling functions (made inline to improve performance)
 
 inline unsigned long profileAbortStatus(texasru_t cause, long thread, long xid) {
   stats[thread][xid].xabortCount++;

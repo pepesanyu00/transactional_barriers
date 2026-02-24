@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #include "stats.h"
 
 char fname[256];
@@ -8,11 +17,11 @@ struct Stats **stats;
 int statsFileInit(int argc, char **argv, long thCount) {
   int i,j;
   char ext[25];
-  //Saco la extensión con identificador de proceso para tener un archivo único
+  // Obtain the process ID to generate a unique filename
   sprintf(ext,"stats/%d.stats", getpid());
   strncpy(fname, ext, sizeof(fname)-1);
-  printf("Nombre del fichero: %s",fname);
-  //Inicio los arrays de estadísticas
+  printf("Filename: %s",fname);
+  // Initialize the statistics arrays
   threadCount = thCount;
   
   stats = (struct Stats **)malloc(sizeof(struct Stats *)*thCount);
@@ -54,7 +63,7 @@ int dumpStats(float time, int ver) {
   int i,j;
   unsigned long int tmp, comm, fall, retComm;
   
-  //Creo el fichero
+  // Create the file
   f = fopen(fname,"w");
   if(!f) return 0;
   printf("Writing stats to: %s\n", fname);
@@ -177,7 +186,7 @@ int dumpStats(float time, int ver) {
   }
   fprintf(f, "Total: %lu\n", tmp);
 
-  fprintf(f, "Other aborts (deberían ser 0): ");
+  fprintf(f, "Other aborts (should be 0): ");
   for(j=0, tmp=0; j<MAX_XACT_IDS; j++) {
     (j==SPEC_XACT_ID)? fprintf(f, " XIDSB: ") : fprintf(f, " XID%d: ", j);
     for(i=0; i<threadCount; tmp += stats[i++][j].otherAborts)

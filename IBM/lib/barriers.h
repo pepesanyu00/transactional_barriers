@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #ifndef BARRIERS_H
 #define BARRIERS_H
 
@@ -19,35 +28,35 @@
 #define MAX_RETRIES 5
 #define MAX_CAPACITY_RETRIES 3
 
-// Esta macro siempre debe coincidir con el número de transacciones(xacts) que se pasen a statsFileInit, sino las estadísticas estarán mal.
+// This macro must always match the number of transactions (xacts) passed to statsFileInit, otherwise statistics will be incorrect.
 #define MAX_XACT_IDS 1
 
-/* Esta macro se define para indicar que transacción es la correspondiente a la barrera,
-   para que se puedan definir transacciones junto con la barrera y que esta sea la última
-   en el fichero de estadísticas */
+/* This macro is defined to indicate which transaction corresponds to the barrier,
+   so that transactions can be defined alongside the barrier and it is the last one
+   in the statistics file. */
 #define SPEC_XACT_ID MAX_XACT_IDS-1
 
-/* Macros para hacer una transacción escapada (para poder leer y escribir variables que normalmente darían aborto por conflicto)
-   dentro de una transaccion */
+/* Macros for an escape transaction (used to read and write variables that would normally cause a conflict abort)
+   within a transaction */
 #define BEGIN_ESCAPE __builtin_tsuspend()
 #define END_ESCAPE __builtin_tresume()
 
-/* inicializa las variables necesarias para implementar una transacción, debe ser llamada una vez por cada thread 
-   al principio del bloque paralelo  */
+/* Initializes the variables required to implement a transaction; must be called once per thread 
+   at the beginning of the parallel block */
 #define TX_DESCRIPTOR_INIT()        tm_tx_t tx;                                 \
                                     tx.order = 1;                               \
                                     tx.retries = 0;                             \
                                     tx.speculative = 0
 
 
-// Inicializa las variables globales necesarias para las barreras
+// Initializes the global variables required for the barriers
 #define BARRIER_DESCRIPTOR_INIT(numTh) g_specvars.barrier.nb_threads = numTh;   \
                                        g_specvars.barrier.remain     = numTh
 
 
-// Empieza una transacción
+// Begins a transaction
 #define BEGIN_TRANSACTION(thId, xId)                                                     \
-  assert(xId != SPEC_XACT_ID); /* Me aseguro de que no tiene mismo id que sb*/  \
+  assert(xId != SPEC_XACT_ID); /* Ensure it does not have the same id as sb */  \
   if(!tx.speculative) {                                                         \
     __label__ __p_failure;                                                      \
     texasru_t __p_abortCause;                                                   \
@@ -66,7 +75,7 @@ __p_failure:                                                                    
     }                                                                           \
   }
 
-// commita una transacción
+// Commits a transaction
 #define TM_STOP(thId, xId)                                                      \
       if(!tx.speculative) {                                                     \
         if (tx.retries <= MAX_RETRIES) {                                        \
@@ -83,7 +92,7 @@ __p_failure:                                                                    
         if (tx.order <= g_specvars.tx_order) {                                  \
           END_ESCAPE;                                                           \
           __builtin_tend(0);                                                    \
-          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID de la xact especulativa abierta en SB_BARRIER*/ \
+          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID of the speculative xact opened in SB_BARRIER */ \
           tx.speculative = 0;                                                   \
           tx.retries = 0;                                                       \
           tx.specLevel = tx.specMax;                                            \
@@ -103,9 +112,9 @@ __p_failure:                                                                    
         }                                                                       \
       }
 
-// Comienza una barrera especulativa
+// Begins a speculative barrier
 #define SB_BARRIER(thId)                                                        \
-  /* Se comprueba si está en modo especulativo*/                                \
+  /* Check if it's in speculative mode */                                       \
   if (tx.speculative) {                                                         \
     BEGIN_ESCAPE;                                                               \
     while (tx.order > g_specvars.tx_order);                                     \
@@ -117,7 +126,7 @@ __p_failure:                                                                    
     __builtin_set_texasru (0);                                                  \
   }                                                                             \
   tx.order += 1;                                                                \
-  /* Se comprueba si es el último en pasar la barrera */                        \
+  /* Check if it is the last one to pass the barrier */                        \
   if (__sync_add_and_fetch(&(g_specvars.barrier.remain),-1) == 0) {             \
     g_specvars.barrier.remain = g_specvars.barrier.nb_threads;                  \
     __sync_add_and_fetch(&(g_specvars.tx_order), 1);                            \
@@ -126,7 +135,7 @@ __p_failure:                                                                    
     texasru_t __p_abortCause;                                                   \
 __p_failure:                                                                    \
     __p_abortCause = __builtin_get_texasru ();                                  \
-    /* Si hay retries significa que ha abortado, se registra el error*/         \
+    /* If there are retries, it means it aborted; record the error */           \
     if(tx.retries) profileAbortStatus(__p_abortCause, thId, SPEC_XACT_ID);      \
     tx.retries++;                                                               \
     if (tx.order <= g_specvars.tx_order) {                                      \
@@ -143,9 +152,9 @@ __p_failure:                                                                    
       }                                                                         \
     }
 
-// Última barrera por pasar
+// Last barrier to pass
 #define LAST_BARRIER(thId)                                                      \
-  /* Si está en especulativo, se espera a los demás y se commita */             \
+  /* If in speculative mode, wait for others and commit */                      \
   if (tx.speculative) {                                                         \
     BEGIN_ESCAPE;                                                               \
     while (tx.order > g_specvars.tx_order);                                     \
@@ -156,7 +165,7 @@ __p_failure:                                                                    
     tx.retries = 0;                                                             \
   }                                                                             \
   tx.order += 1;                                                                \
-  /* Si el el último hilo, se incrementa el global order y termina, sino espera*/\
+  /* If it's the last thread, increment the global order and finish, otherwise, wait */\
   if (__sync_add_and_fetch(&(g_specvars.barrier.remain),-1) == 0) {             \
     g_specvars.barrier.remain = g_specvars.barrier.nb_threads;                  \
     __sync_add_and_fetch(&(g_specvars.tx_order), 1);                            \
@@ -166,16 +175,16 @@ __p_failure:                                                                    
 
 // Macro checkspec
 #define CHECK_SPEC(thId)                                                      \
-      /* Commita*/                                                              \
+      /* Commit */                                                              \
       if(tx.speculative) {                                                      \
         BEGIN_ESCAPE;                                                           \
         if (tx.order <= g_specvars.tx_order) {                                  \
           END_ESCAPE;                                                           \
           __builtin_tend(0);                                                    \
-          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID de la xact especulativa abierta en SB_BARRIER*/ \
+          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID of the speculative xact opened in SB_BARRIER */ \
           tx.speculative = 0;                                                   \
           tx.retries = 0;                                                       \
-	/* Espera y commita*/                                                   \
+	/* Wait and commit */                                                   \
         } else {                                                                \
           END_ESCAPE;                                                           \
             BEGIN_ESCAPE;                                                       \
@@ -194,11 +203,11 @@ typedef struct fback_lock {
   uint8_t pad[CACHE_BLOCK_SIZE-sizeof(uint32_t)*2];
 } __attribute__ ((aligned (CACHE_BLOCK_SIZE))) fback_lock_t;
 
-// Declarado en stats.c
+// Declared in stats.c
 extern fback_lock_t g_fallback_lock;
 
-/* Descriptor de transacción */
-// Con pad1 y pad2 se añade padding para prevenir el false sharing
+/* Transaction descriptor */
+// Padding is added using pad1 and pad2 to prevent false sharing
 typedef struct tm_tx {
   uint32_t order;
   uint8_t pad1[CACHE_BLOCK_SIZE-sizeof(uint32_t)];
@@ -207,21 +216,21 @@ typedef struct tm_tx {
   uint8_t pad2[CACHE_BLOCK_SIZE-sizeof(uint32_t)*3-sizeof(uint8_t)];
 } __attribute__ ((aligned (CACHE_BLOCK_SIZE))) tm_tx_t;
 
-/* Descriptor de barrera transaccional */
+/* Transactional barrier descriptor */
 typedef struct barrier {
-  int nb_threads; /* Número de threads que esperan en la barrera */
-  volatile uint32_t remain; /* Threads restantes hasta desbloquear la barrera */
+  int nb_threads; /* Number of threads waiting at the barrier */
+  volatile uint32_t remain; /* Remaining threads until the barrier is unlocked */
 } barrier_t;
 
-//Creo una estructura para colocar el global tx order y la barrera
+// Structure to place the global tx order and the barrier
 typedef struct global_spec_vars {
-  volatile uint32_t tx_order; //Tiene que ser inicializado a 1
+  volatile uint32_t tx_order; // Must be initialized to 1
   uint8_t pad1[CACHE_BLOCK_SIZE-sizeof(uint32_t)];
   barrier_t barrier;
   uint8_t pad2[CACHE_BLOCK_SIZE-sizeof(barrier_t)];
 } __attribute__ ((aligned (CACHE_BLOCK_SIZE))) g_spec_vars_t;
 
-// Estructura que guarda las variables globales necesarias para las barreras
+// Structure that holds the global variables required for the barriers
 extern g_spec_vars_t g_specvars;
 
 

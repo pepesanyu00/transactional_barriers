@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -9,37 +18,32 @@
 #include <chrono>
 #include <assert.h>
 #include <omp.h>
-#include <unistd.h> //For getpid(), used to get the pid to generate a unique filename
-#include <typeinfo> //To obtain type name as string
+#include <unistd.h> // For getpid(), used to generate a unique filename
+#include <typeinfo> // To obtain type name as string
 #include "lib/barriers.h"
 #include "lib/stats.h"
-//#include "thread.h"
-//#include "tm-sb.h"
-//#include "transaction.h"
+
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 #define PATH_RESULTS "./results/"
 
-#define DTYPE double        /* DATA TYPE */
-#define ITYPE uint64_t /* INDEX TYPE */
+#define DTYPE double   // Data type
+#define ITYPE uint64_t // Index type
 
 #define ALIGN 64
 
-//RIC Me defino unas macros para reservar memoria alineada
-// Uso el operador ## para concatenar algo al nombre de la variable.
-// Así creo dos variables al reservar memoria: la que se usará (alineada) y otra para que utilizaré al final para liberar memoria
+// Macros for aligned memory allocation
+// Uses the ## operator to concatenate to the variable name.
+// Creates two variables: the aligned one for usage, and another for freeing memory later.
 #define ALIGNED_ARRAY_NEW(_type, _var, _elem, _align)                                                                                             \
-  assert(_align >= sizeof(_type) && _elem >= 1);                          /* Compruebo condiciones */                                             \
-                                                                          /* Reservo más elementos que elem: align(en bytes)/numbytes de type */  \
-  _type *_var##__unaligned = new _type[_elem + _align / sizeof(_type)]; /* Con () inicializamos a 0 -- lo quito*/                                 \
-  assert(_var##__unaligned != NULL); /* && _var##__unaligned[0] == 0 && _var##__unaligned[1] == 0);  */                                           \
-  /* Hago un casting del puntero con uintptr_t. De esta manera el operador + lo tomará como un número y operará en */                             \
-  /* aritmética entera. Si no hiciera el casting, el compilador aplica aritmética de punteros */                                                  \
-  /* Luego hago una máscara con todo unos menos log2(align) ceros y dejo los lsb a 0 */                                                           \
+  assert(_align >= sizeof(_type) && _elem >= 1);                          /* Check conditions */                                                  \
+                                                                          /* Allocate extra elements to ensure alignment */                       \
+  _type *_var##__unaligned = new _type[_elem + _align / sizeof(_type)];   /* Allocate unaligned memory */                                         \
+  assert(_var##__unaligned != NULL);                                                                                                              \
+  /* Cast pointer to uintptr_t to perform integer arithmetic, then mask to align bits */                                                          \
   _var = (_type *)(((uintptr_t)_var##__unaligned + _align - 1) & ~(uintptr_t)(_align - 1));                                                       \
-  assert(((uintptr_t)_var & (uintptr_t)(_align - 1)) == 0); /* Compruebo que var esté alineado */                                                 \
-  /* cout << #_var << "__unaligned: " << hex << _var##__unaligned << "(" << dec << (uintptr_t) _var##__unaligned << ") -> " << #_var << ": " << hex << _var << "(" << dec << (uintptr_t) _var << ")" << endl; */
+  assert(((uintptr_t)_var & (uintptr_t)(_align - 1)) == 0); /* Check alignment */
 
 #define ALIGNED_ARRAY_DEL(_var)      \
   assert(_var##__unaligned != NULL); \
@@ -96,52 +100,40 @@ void preprocess(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &nor
 }
 
 void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
-           vector<DTYPE> &df, vector<DTYPE> &dg, DTYPE *profile, ITYPE *profileIndex) //vector<DTYPE> &profile, vector<ITYPE> &profileIndex)
+           vector<DTYPE> &df, vector<DTYPE> &dg, DTYPE *profile, ITYPE *profileIndex)
 {
-  //RIC con la memoria transaccional vamos a intentar no privatizar y acceder al profile y al indexProfile protegiéndolo con una transacción
-  // Private structures
-  //vector<DTYPE> profile_tmp(profileLength * numThreads);
-  //vector<ITYPE> profileIndex_tmp(profileLength * numThreads);
+  // With transactional memory, we attempt to avoid privatization and access the global profile protected by a transaction.
 
-#pragma omp parallel //proc_bind(spread)
+#pragma omp parallel
   {
     TX_DESCRIPTOR_INIT();
     ITYPE tid = omp_get_thread_num();
     DTYPE covariance, correlation;
 
-//NO ES IMPORTANTE
 #ifdef DEBUG
-    ITYPE iini, ifin, jini, jfin; //Sólo para imprimir
+    ITYPE iini, ifin, jini, jfin; // Only for printing
 #endif
-
 
     for (ITYPE tileii = 0; tileii < profileLength; tileii += maxTileHeight)
     {
-      //Sin protección en el acceso al profile hace falta barrera
 #pragma omp for schedule(dynamic) nowait
       for (ITYPE tilej = tileii; tilej < profileLength; tilej += maxTileWidth)
       {
-        //Para recorrer en diagonal los tiles
+        // Traverse tiles diagonally
         ITYPE tilei = tilej - tileii;
-        //Para recorrer en el orden de los for
-        //ITYPE tilei = tileii;
         ITYPE i = tilei;
         ITYPE j = MIN(MAX(tilei + exclusionZone + 1, tilej), profileLength);
 
-
-//NO ES IMPORTANTE
 #ifdef DEBUG
         iini = i;
         jini = j;
 #endif
 
-
-
         for (ITYPE jj = j; jj < MIN(tilej + maxTileWidth, profileLength); jj++)
         {
-          //Si i==j ==> Coordenada de la diagonal principal. Sólo se calcula el upper triangle.
-          //Si no, el upper triangle tb se calcula
-          //Triángulo superior
+          // If i==j ==> Main diagonal coordinate (only compute upper triangle).
+          // Otherwise, upper triangle is also computed.
+          // Upper triangle computing
           covariance = 0;
           //BEGIN_ESCAPE;
           for (ITYPE wi = 0; wi < windowSize; wi++)
@@ -151,7 +143,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
           CHECK_SPEC(tid);
           if (correlation > profile[i])
           {
-            profile[i] = correlation; //Actúo sobre el array global
+            profile[i] = correlation; // Updating global array
             profileIndex[i] = jj;
           }
           if (correlation > profile[jj])
@@ -196,27 +188,20 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 #endif
 
 
-        /**************************************************************************/
         // Lower triangle
         if (tilei != tilej)
         {
-          //Si el tile difiere en sus coordenadas es un tile de interior y se calcula el lower triangle también
-          //Triángulo inferior
+          // If tile coordinates differ, it is an inner tile and the lower triangle is also computed.
           ITYPE i = tilei + 1;
           ITYPE j = tilej;
-
 
 #ifdef DEBUG
           iini = i;
           jini = j;
 #endif
 
-
           for (ITYPE ii = i; ii < MIN(MIN(tilei + maxTileHeight, j - exclusionZone), profileLength); ii++)
           {
-            //Si i==j ==> Coordenada de la diagonal principal. Sólo se calcula el upper triangle.
-            //Si no, el upper triangle tb se calcula
-            //Triángulo superior
             covariance = 0;
             //BEGIN_ESCAPE;
             for (ITYPE wi = 0; wi < windowSize; wi++)
@@ -226,7 +211,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 
             if (correlation > profile[ii])
             {
-              profile[ii] = correlation; //Actúo sobre el array global
+              profile[ii] = correlation; // Updating global array
               profileIndex[ii] = j;
             }
             if (correlation > profile[j])
@@ -269,11 +254,13 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
           cout << "Lower triangle | tid: " << tid << " tilei(ini,fin): " << iini << "," << ifin << " tilej(ini,fin): " << jini << "," << jfin << endl;
 #endif
         }
-      }SB_BARRIER(tid); //Barrera implícita omp si no se pone nowait
+      }
+      SB_BARRIER(tid); // Implicit OpenMP barrier if 'nowait' is not specified
 #ifdef DEBUG
       cout << "-------------------------" << endl;
 #endif
-    }LAST_BARRIER(tid);
+    }
+    LAST_BARRIER(tid);
   }
 }
 
@@ -281,7 +268,7 @@ int main(int argc, char *argv[])
 {
   try
   {
-    // Creation of time meassure structures
+    // Creation of time measure structures
     chrono::steady_clock::time_point tstart, tend;
     chrono::duration<double> telapsed;
 
@@ -300,18 +287,15 @@ int main(int argc, char *argv[])
     maxTileWidth = maxTileHeight = atoi(argv[3]);
     if (((maxTileWidth * sizeof(DTYPE)) % ALIGN) != 0)
     {
-      cout << "El tamaño del tile no es múltiplo del tamaño de línea de caché. La versión TM puede dar falsos conflictos." << endl;
+      cout << "Warning: Tile size is not a multiple of cache line size. The TM version may encounter false sharing conflicts." << endl;
     }
     numThreads = atoi(argv[4]);
     BARRIER_DESCRIPTOR_INIT(numThreads);
 
-    if(!statsFileInit(argc,argv,numThreads)){
-      cout << "Error abriendo o inicializando el archivo de estadísticas." << endl;
+    if (!statsFileInit(argc, argv, numThreads)){
+      cout << "Error opening or initializing the statistics file." << endl;
       return 0;
     }
-
-
-
 
     bool dumpProfile = (atoi(argv[5]) == 0) ? false : true;
     // Set the exclusion zone to 0.25
@@ -332,8 +316,7 @@ int main(int argc, char *argv[])
     cout << endl;
     cout << "[>>] Reading File: " << inputfilename << "..." << endl;
 
-    /* ------------------------------------------------------------------ */
-    /* Read time series file */
+    // Read time series file
     tstart = chrono::steady_clock::now();
 
     fstream tSeriesFile(inputfilename, ios_base::in);
@@ -361,16 +344,15 @@ int main(int argc, char *argv[])
 
     // Auxiliary vectors
     vector<DTYPE> norms(profileLength), means(profileLength), df(profileLength), dg(profileLength);
-    //RIC Alineo los vectores del profile y profileIndex para que no haya conflictos por false sharing usando transacciones
-    //RIC Habrá que introducier un tamaño de ventana múltiplo de la línea de caché
-    //vector<DTYPE> profile(profileLength);
-    //vector<ITYPE> profileIndex(profileLength);
+
+    // Align the profile and profileIndex vectors to mitigate false sharing conflicts in TM
+    // Window size must be a multiple of the cache line
     DTYPE *profile = NULL;
     ITYPE *profileIndex = NULL;
-    ALIGNED_ARRAY_NEW(DTYPE, profile, profileLength + ALIGN, ALIGN); //Meto profileLength+ALIGN para tener padding por si acaso y evitar false sharing con TM
+    ALIGNED_ARRAY_NEW(DTYPE, profile, profileLength + ALIGN, ALIGN); // Added margin of ALIGN to pad and avoid false sharing
     ALIGNED_ARRAY_NEW(ITYPE, profileIndex, profileLength + ALIGN, ALIGN);
 
-    //Profile initialization
+    // Profile initialization
     for (ITYPE i = 0; i < profileLength; i++) {
       profile[i] = -numeric_limits<DTYPE>::infinity();
     }
@@ -394,29 +376,25 @@ int main(int argc, char *argv[])
     cout << "------------------------------------------------------------" << endl;
     cout << endl;
 
-    /***************** Preprocess ******************/
     cout << "[>>] Preprocessing..." << endl;
     tstart = chrono::steady_clock::now();
     preprocess(tSeries, means, norms, df, dg);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] Preprocessing Time:         " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
-    /******************** SCAMP ********************/
     cout << "[>>] Executing SCAMP..." << endl;
     tstart = chrono::steady_clock::now();
     scamp(tSeries, means, norms, df, dg, profile, profileIndex);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] SCAMP Time:              " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
     cout << "[>>] Saving result: " << outfilename << " ..." << endl;
     fstream statsFile(outfilename, ios_base::out);
     statsFile << "# Time (s)" << endl;
     statsFile << setprecision(6) << fixed << telapsed.count() << endl;
-    // El tamaño no cambia con el número de threads
+    // Memory footprint tracking
     statsFile << "# Mem(KB) tseries,means,norms,df,dg,profile,profileIndex,Total(MB)" << endl;
     statsFile << setprecision(2) << fixed <<(sizeof(DTYPE) * tSeries.size()) / 1024.0f << "," << (sizeof(DTYPE) * means.size()) / 1024.0f << "," <<
                  (sizeof(DTYPE) * norms.size()) / 1024.0f << "," << (sizeof(DTYPE) * df.size()) / 1024.0f << "," <<
@@ -439,8 +417,8 @@ int main(int argc, char *argv[])
     statsFile.close();
     cout << endl;
 
-    if(!dumpStats(telapsed.count(),1)){
-      cout << "Error volcando las estadísticas." << endl;
+    if (!dumpStats(telapsed.count(), 1)){
+      cout << "Error dumping statistics." << endl;
     }
 
     ALIGNED_ARRAY_DEL(profile);

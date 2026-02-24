@@ -1,14 +1,23 @@
 #!/bin/bash
+# ******************************************************************************
+#  * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+#  *          Eladio Gutierrez (eladio@uma.es)
+#  *          Ricardo Quislant (quislant@uma.es)
+#  *          Oscar Plata (oplata@uma.es)
+#  *
+#  * University: Dept. of Computer Architecture, University of Malaga,
+#  *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+#  ******************************************************************************
 
-#Para que funciones el proc_bind(close) de #pragma omp parallel
-#hay que definir esta variable de entorno
+# To make the proc_bind(close) from #pragma omp parallel work,
+# this environment variable must be set.
 # threads: Each place contains a hardware thread.
 # cores: Each place contains a core. If OMP_PLACES is not set, the default setting is cores.
 # num_places: Is the number of places.
 #export OMP_PLACES="{0:10:4},{10:10:4}"
 #export OMP_PLACES="{0,1,2,3}:40:4"
 
-#Series cortas
+# Short Series
 benchs=(#"./timeseries/power-MPIII-SVF_n180000.txt 1325"
     "./timeseries/seismology-MPIII-SVE_n180000.txt 50"
     #"./timeseries/e0103_n180000.txt 500"
@@ -25,7 +34,7 @@ benchs=(#"./timeseries/power-MPIII-SVF_n180000.txt 1325"
 
 hilos="2 4 8 16 32 64 96"
 n=2
-# una tirada con dump stats a 1. Se pone a 0 para las siguientes
+# one run with dump stats to 1. Set to 0 for subsequent runs
 dumpStats=1
 for (( j=0; j<$n; j++ )); do
     for i in "${benchs[@]}"; do

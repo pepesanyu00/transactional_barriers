@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevarপ্রবাসী Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #ifndef BARRIERS_H_
 #define BARRIERS_H_
 
@@ -11,10 +20,10 @@
 
 
 
-// Intrínseco de pausa recomendada por intel para los bucles de espera
+// Intel recommended pause intrinsic for spin-wait loops
 #define CPU_RELAX  _mm_pause()
 
-// Código de error para indicar que el lock está cogido por otro hilo
+// Error code indicating that the lock is taken by another thread
 #define LOCK_TAKEN 0xFF
 
 #define CACHE_BLOCK_SIZE 64
@@ -29,37 +38,37 @@
 
 #define MAX_CAPACITY_RETRIES 50
 
-// Esta macro siempre debe coincidir con el número de transacciones(xacts) que se pasen a statsFileInit, sino las estadísticas estarán mal.
+// This macro must always match the number of transactions (xacts) passed to statsFileInit, otherwise the statistics will be wrong.
 #define MAX_XACT_IDS 1
 
-/* Esta macro se define para indicar que transacción es la correspondiente a la barrera,
-   para que se puedan definir transacciones junto con la barrera y que esta sea la última
-   en el fichero de estadísticas */
+/* This macro is defined to indicate which transaction corresponds to the barrier,
+   so that transactions can be defined along with the barrier and this one will be the last
+   in the statistics file */
 #define SPEC_XACT_ID MAX_XACT_IDS-1
 
-/* Macros para hacer una transacción escapada (para poder leer y escribir variables que normalmente darían aborto por conflicto)
-   dentro de una transaccion */
+/* Macros to make an escaped transaction (to be able to read and write variables that would normally cause an abort due to conflict)
+   inside a transaction */
 #define BEGIN_ESCAPE _xsusldtrk()
 #define END_ESCAPE _xresldtrk()
 
 
 
 
-/* inicializa las variables necesarias para implementar una transacción, debe ser llamada una vez por cada thread 
-   al principio del bloque paralelo  */
+/* initializes the necessary variables to implement a transaction, must be called once by each thread 
+   at the beginning of the parallel block  */
 #define TX_DESCRIPTOR_INIT()        tm_tx_t tx;                                 \
                                     tx.order = 1;                               \
                                     tx.retries = 0;                             \
                                     tx.speculative = 0;                         \
                                     tx.status = 0
 
-// Inicializa las variables globales necesarias para las barreras
+// Initializes the global variables necessary for the barriers
 #define BARRIER_DESCRIPTOR_INIT(numTh) g_specvars.barrier.nb_threads = numTh;   \
                                        g_specvars.barrier.remain     = numTh
 
 
 
-// Empieza una transacción
+// Starts a transaction
 #define BEGIN_TRANSACTION(thId, xId)                                                         \
   tx.retries = 0;                                                           \
   do                                                                           \
@@ -80,12 +89,12 @@
     }                                                                          \
     while (g_ticketlock.ticket >= g_ticketlock.turn)                           \
       BEGIN_ESCAPE;                                                           \
-      CPU_RELAX(); /* Evitar Lemming effect */                                  \
+      CPU_RELAX(); /* Avoid Lemming effect */                                  \
       END_ESCAPE;                                                             \
   } while ((tx.status = _xbegin()) != _XBEGIN_STARTED)
 
 
-// commita una transacción
+// commits a transaction
 #define COMMIT_TRANSACTION(thId, xId)                                                      \
       if(!tx.speculative) {                                                     \
         if (tx.retries <= MAX_RETRIES) {                                        \
@@ -102,7 +111,7 @@
         if (tx.order <= g_specvars.tx_order) {                                  \
           END_ESCAPE;                                                           \
           _xend();                                                    \
-          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID de la xact especulativa abierta en SB_BARRIER*/ \
+          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* Speculative xact ID opened in SB_BARRIER*/ \
           tx.speculative = 0;                                                   \
           tx.retries = 0;                                                       \
           tx.specLevel = tx.specMax;                                            \
@@ -123,24 +132,24 @@
       }
 
 #define SB_BARRIER(thId)                                                        \
-  /* Se comprueba si el hilo entra por primera vez a la barrera (si está en modo especulativo o no) */ \
+  /* Check if the thread enters the barrier for the first time (if it's in speculative mode or not) */ \
   if (tx.speculative) {                                                         \
     BEGIN_ESCAPE;                                                               \
     while (tx.order > g_specvars.tx_order);                                     \
     END_ESCAPE;                                                                 \
-    /* Aquí ya he terminado una barrera así que puedo commitear la transacción para después*/ \
-    /* empezar la de la siguiente.*/   \
+    /* Here I have finished a barrier so I can commit the transaction to later*/ \
+    /* start the next one.*/   \
     _xend();                                                          \
     profileCommit(thId, SPEC_XACT_ID, tx.retries-1);                            \
     tx.speculative = 0;                                                         \
     tx.retries = 0;                                                             \
   }                                                                             \
-  /* incrementamos el orden del hilo */             \
+  /* increment the order of the thread */             \
   tx.order += 1;                                                                \
   tx.status = 0;                                                                \
-  /* Determina si el thread es el último en entrar a la barrera */                        \
+  /* Determine if the thread is the last to enter the barrier */                        \
   if (__sync_add_and_fetch(&(g_specvars.barrier.remain),-1) == 0) {             \
-    /* Si se es el último en cruzar la barrera, se hace un reset y se incrementa el global order*/                                    \
+    /* If the last to cross the barrier, reset and increment the global order*/                                    \
     g_specvars.barrier.remain = g_specvars.barrier.nb_threads;                  \
     __sync_add_and_fetch(&(g_specvars.tx_order), 1);                            \
   } else {                                                                      \
@@ -164,8 +173,8 @@ __p_failure:                                                                    
   }
                                                                   
 
-/* Última barrera antes de terminar la ejecución, al contrario que la otra macro, 
-   esta no abre otra transacción sino que termina. */
+/* Last barrier before finishing the execution, unlike the other macro, 
+   this one does not open another transaction but finishes. */
 #define LAST_BARRIER(thId)                                                      \
   if (tx.speculative) {                                                         \
     BEGIN_ESCAPE;                                                               \
@@ -180,19 +189,19 @@ __p_failure:                                                                    
   if (__sync_add_and_fetch(&(g_specvars.barrier.remain),-1) == 0) {             \
     g_specvars.barrier.remain = g_specvars.barrier.nb_threads;                  \
     __sync_add_and_fetch(&(g_specvars.tx_order), 1);                            \
-  /* Aquí está la diferencia con SB_BARRIER, no se crea otra transacción sino que espera a los demás y termina */ \
+  /* Here is the difference with SB_BARRIER, it doesn't create another transaction but waits for the others and finishes */ \
   } else {                                                                      \
     while(tx.order > g_specvars.tx_order) ;                                     \
   }
 
-//  Termina la transacción en el punto en el que se indica, para que las transacciones no sean demasiado largas
+//  Finishes the transaction at the indicated point, so that transactions are not overly long
 #define CHECK_SPEC(thId, xId)                                                      \
       if(tx.speculative) {                                                      \
         BEGIN_ESCAPE;                                                           \
         if (tx.order <= g_specvars.tx_order) {                                  \
           END_ESCAPE;                                                           \
           _xend();                                                 \
-          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* ID de la xact especulativa abierta en SB_BARRIER*/ \
+          profileCommit(thId, SPEC_XACT_ID, tx.retries-1); /* Speculative xact ID opened in SB_BARRIER*/ \
           tx.speculative = 0;                                                   \
           tx.retries = 0;                                                       \
         } else {                                                                \
@@ -208,7 +217,7 @@ __p_failure:                                                                    
 
 
 
-// Tickets para realizar la ejecución de forma secuencial en caso de que sea necesario
+// Tickets to perform the execution sequentially in case it is necessary
 struct TicketLock
 {
   volatile char pad1[CACHE_BLOCK_SIZE];
@@ -217,40 +226,40 @@ struct TicketLock
   volatile char pad2[CACHE_BLOCK_SIZE];
 };
 
-// Declarado en stats.c 
+// Declared in stats.c 
 extern struct TicketLock g_ticketlock;
 
-/* Descriptor de transacción*/
+/* Transaction Descriptor */
 typedef struct tm_tx {
-  uint32_t order; /* Orden local de la transacción*/
+  uint32_t order; /* Local order of the transaction */
   uint8_t pad1[CACHE_BLOCK_SIZE-sizeof(uint32_t)];
-  uint32_t retries; /* Número de retries pendientes antes de hacer fallback*/
-  uint8_t speculative; /* Verdadero si la transacción está abierta*/
-  uint32_t status;  /* Estado de la transacción.*/
+  uint32_t retries; /* Number of pending retries before falling back */
+  uint8_t speculative; /* True if the transaction is open */
+  uint32_t status;  /* Transaction status. */
   uint32_t capRetries;
   uint8_t pad2[CACHE_BLOCK_SIZE-sizeof(uint32_t)*3-sizeof(uint8_t)]; 
 } __attribute__ ((aligned (CACHE_BLOCK_SIZE))) tm_tx_t;
 
 
-/* Descriptor de barrera transaccional */
+/* Transactional barrier descriptor */
 typedef struct barrier {
-  int nb_threads; /* Número de threads que esperan en la barrera */
-  volatile uint32_t remain; /* Threads restantes hasta desbloquear la barrera */
+  int nb_threads; /* Number of threads waiting at the barrier */
+  volatile uint32_t remain; /* Remaining threads until the barrier is unblocked */
 } barrier_t;
 
 
 typedef struct global_spec_vars {
-  volatile uint32_t tx_order; //Tiene que ser inicializado a 1
+  volatile uint32_t tx_order; // Must be initialized to 1
   uint8_t pad1[CACHE_BLOCK_SIZE-sizeof(uint32_t)];
   barrier_t barrier;
   uint8_t pad2[CACHE_BLOCK_SIZE-sizeof(barrier_t)];
 } __attribute__ ((aligned (CACHE_BLOCK_SIZE))) g_spec_vars_t;
 
-// Estructura que guarda las variables globales necesarias para las barreras
+// Structure that saves the global variables necessary for the barriers
 extern g_spec_vars_t g_specvars;
 
 
-/* Lock para hacer un fallback*/
+/* Lock for fallback */
 typedef struct fback_lock {
   volatile uint32_t ticket;
   volatile uint32_t turn;

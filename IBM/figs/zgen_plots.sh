@@ -1,4 +1,13 @@
 #!/bin/bash
+# ******************************************************************************
+#  * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+#  *          Eladio Gutierrez (eladio@uma.es)
+#  *          Ricardo Quislant (quislant@uma.es)
+#  *          Oscar Plata (oplata@uma.es)
+#  *
+#  * University: Dept. of Computer Architecture, University of Malaga,
+#  *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+#  ******************************************************************************
 #python3 newplotscamp.py audio-MPIII-SVD 200 1
 #python3 newplotscamp.py e0103_n180000.txt 500 1
 #python3 newplotscamp.py penguin_sample_TutorialMPweb.txt 800 1

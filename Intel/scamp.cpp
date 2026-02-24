@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -14,8 +23,8 @@
 
 #define PATH_RESULTS "./results/"
 
-#define DTYPE double   /* DATA TYPE */
-#define ITYPE uint64_t /* INDEX TYPE */
+#define DTYPE double   // Data type
+#define ITYPE uint64_t // Index type
 
 using namespace std;
 
@@ -74,7 +83,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
   vector<DTYPE> profile_tmp(profileLength * numThreads);
   vector<ITYPE> profileIndex_tmp(profileLength * numThreads);
 
-#pragma omp parallel //proc_bind(close)
+#pragma omp parallel
   {
     // Suppossing ITYPE as uint32_t (we could index series up to 4G elements), to index profile_tmp we need more bits (uint64_t)
     uint64_t my_offset = omp_get_thread_num() * profileLength;
@@ -138,7 +147,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
     {
       max_corr = -numeric_limits<DTYPE>::infinity();
       for (ITYPE th = 0; th < numThreads; th++)
-      { // uint64_t counter to promote the index of profile_tmp to uint64_t
+      { // uint64_t counter to avoid index overflows in profile_tmp
         if (profile_tmp[colum + (th * profileLength)] > max_corr)
         {
           max_corr = profile_tmp[colum + (th * profileLength)];
@@ -190,8 +199,7 @@ int main(int argc, char *argv[])
     cout << endl;
     cout << "[>>] Reading File: " << inputfilename << "..." << endl;
 
-    /* ------------------------------------------------------------------ */
-    /* Read time series file */
+    // Read time series file
     tstart = chrono::steady_clock::now();
 
     fstream tSeriesFile(inputfilename, ios_base::in);
@@ -241,29 +249,25 @@ int main(int argc, char *argv[])
     cout << "------------------------------------------------------------" << endl;
     cout << endl;
 
-    /***************** Preprocess ******************/
     cout << "[>>] Preprocessing..." << endl;
     tstart = chrono::steady_clock::now();
     preprocess(tSeries, means, norms, df, dg);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] Preprocessing Time:         " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
-    /******************** SCAMP ********************/
     cout << "[>>] Executing SCAMP..." << endl;
     tstart = chrono::steady_clock::now();
     scamp(tSeries, means, norms, df, dg, profile, profileIndex);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] SCAMP Time:              " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
     cout << "[>>] Saving result: " << outfilename << " ..." << endl;
     fstream statsFile(outfilename, ios_base::out);
     statsFile << "# Time (s)" << endl;
     statsFile << setprecision(6) << fixed << telapsed.count() << endl;
-    // El tamaño del profile y del profileIndex va multiplicado por (numthreads + 1): numThreads copias privadas más la global
+    // Memory footprint tracking: Multiply by (numThreads + 1) to account for private copies and the global one
     statsFile << "# Mem(KB) tseries,means,norms,df,dg,profile,profileIndex,Total(MB)" << endl;
     statsFile << setprecision(2) << fixed <<(sizeof(DTYPE) * tSeries.size()) / 1024.0f << "," << (sizeof(DTYPE) * means.size()) / 1024.0f << "," <<
                  (sizeof(DTYPE) * norms.size()) / 1024.0f << "," << (sizeof(DTYPE) * df.size()) / 1024.0f << "," <<

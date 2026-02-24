@@ -1,6 +1,15 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #include "stats.h"
 
-/* Archivo en el que se desarrollan las funciones de inicialización de estadísticas*/
+/* File in which the statistics initialization functions are developed */
 
 
 
@@ -16,11 +25,11 @@ int statsFileInit(int argc, char **argv, long thCount, long xCount)
   int i, j;
   char ext[25];
 
-  //Saco la extensión con identificador de proceso para tener un archivo único
+  // I get the extension with the process identifier to have a unique file
   sprintf(ext,"stats/%d.stats", getpid());
   strncpy(fname, ext, sizeof(fname) - 1);
-  printf("Nombre del fichero: %s\n",fname);
-  //Inicio los arrays de estadísticas
+  printf("File Name: %s\n",fname);
+  // Initialize the statistics arrays
   threadCount = thCount;
   xactCount = xCount;
   //printf("thCount = %d, xCount = %d\n", threadCount, xactCount);
@@ -67,7 +76,7 @@ int dumpStats(double time)
   int i, j;
   unsigned long int tmp, comm, fall, retComm;
 
-  //Creo el fichero
+  // Create the file
   f = fopen(fname, "w");
   if (!f)
     return 0;

@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #include <iostream>
 #include <cmath>
 #include <fstream>
@@ -9,33 +18,32 @@
 #include <chrono>
 #include <assert.h>
 #include <omp.h>
-#include <unistd.h> //For getpid(), used to get the pid to generate a unique filename
-#include <typeinfo> //To obtain type name as string
+#include <unistd.h> // For getpid(), used to get the pid to generate a unique filename
+#include <typeinfo> // To obtain type name as string
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 #define PATH_RESULTS "./results/"
 
-#define DTYPE double        /* DATA TYPE */
-#define ITYPE uint64_t /* INDEX TYPE */
+#define DTYPE double   // Data type
+#define ITYPE uint64_t // Index type
 
 #define ALIGN 64
 
-//RIC Me defino unas macros para reservar memoria alineada
-// Uso el operador ## para concatenar algo al nombre de la variable.
-// Así creo dos variables al reservar memoria: la que se usará (alineada) y otra para que utilizaré al final para liberar memoria
+// Macros to allocate aligned memory
+// Uses the ## operator to concatenate something to the variable name.
+// This way I create two variables when allocating memory: the one that will be used (aligned) and another one that I'll use at the end to free memory
 #define ALIGNED_ARRAY_NEW(_type, _var, _elem, _align)                                                                                             \
-  assert(_align >= sizeof(_type) && _elem >= 1);                          /* Compruebo condiciones */                                             \
-                                                                          /* Reservo más elementos que elem: align(en bytes)/numbytes de type */  \
-  _type *_var##__unaligned = new _type[_elem + _align / sizeof(_type)]; /* Con () inicializamos a 0 -- lo quito*/                                 \
-  assert(_var##__unaligned != NULL); /* && _var##__unaligned[0] == 0 && _var##__unaligned[1] == 0);  */                                           \
-  /* Hago un casting del puntero con uintptr_t. De esta manera el operador + lo tomará como un número y operará en */                             \
-  /* aritmética entera. Si no hiciera el casting, el compilador aplica aritmética de punteros */                                                  \
-  /* Luego hago una máscara con todo unos menos log2(align) ceros y dejo los lsb a 0 */                                                           \
+  assert(_align >= sizeof(_type) && _elem >= 1);                          /* Check conditions */                                                  \
+                                                                          /* Reserve more elements than elem: align(in bytes)/numbytes of type */ \
+  _type *_var##__unaligned = new _type[_elem + _align / sizeof(_type)];                                                                           \
+  assert(_var##__unaligned != NULL);                                                                                                              \
+  /* Cast the pointer with uintptr_t. This way the + operator will take it as a number and operate in */                                          \
+  /* integer arithmetic. If I didn't cast it, the compiler applies pointer arithmetic */                                                          \
+  /* Then I make a mask with all ones minus log2(align) zeros and leave the lsbs to 0 */                                                          \
   _var = (_type *)(((uintptr_t)_var##__unaligned + _align - 1) & ~(uintptr_t)(_align - 1));                                                       \
-  assert(((uintptr_t)_var & (uintptr_t)(_align - 1)) == 0); /* Compruebo que var esté alineado */                                                 \
-  /* cout << #_var << "__unaligned: " << hex << _var##__unaligned << "(" << dec << (uintptr_t) _var##__unaligned << ") -> " << #_var << ": " << hex << _var << "(" << dec << (uintptr_t) _var << ")" << endl; */
+  assert(((uintptr_t)_var & (uintptr_t)(_align - 1)) == 0); /* Check that var is aligned */
 
 #define ALIGNED_ARRAY_DEL(_var)      \
   assert(_var##__unaligned != NULL); \
@@ -92,14 +100,11 @@ void preprocess(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &nor
 }
 
 void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
-           vector<DTYPE> &df, vector<DTYPE> &dg, DTYPE *profile, ITYPE *profileIndex) //vector<DTYPE> &profile, vector<ITYPE> &profileIndex)
+           vector<DTYPE> &df, vector<DTYPE> &dg, DTYPE *profile, ITYPE *profileIndex)
 {
-  //RIC con la memoria transaccional vamos a intentar no privatizar y acceder al profile y al indexProfile protegiéndolo con una transacción
-  // Private structures
-  //vector<DTYPE> profile_tmp(profileLength * numThreads);
-  //vector<ITYPE> profileIndex_tmp(profileLength * numThreads);
+  // Trying to avoid privatization and access the profile and indexProfile protecting it with a transaction
 
-#pragma omp parallel //proc_bind(close)
+#pragma omp parallel
   {
     // Suppossing ITYPE as uint32_t (we could index series up to 4G elements), to index profile_tmp we need more bits (uint64_t)
     //uint64_t my_offset = omp_get_thread_num() * profileLength;
@@ -125,16 +130,14 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
     //for (ITYPE diag = exclusionZone + 1; diag < profileLength; diag++)
     //{
 #ifdef DEBUG
-    ITYPE iini, ifin, jini, jfin; //Sólo para imprimir
+    ITYPE iini, ifin, jini, jfin; // Only to print
 #endif
     for (ITYPE tileii = 0; tileii < profileLength; tileii += maxTileHeight)
     {
 #pragma omp for schedule(dynamic) nowait
       for (ITYPE tilej = tileii; tilej < profileLength; tilej += maxTileWidth)
       {
-        //Para recorrer en diagonal los tiles
-        //ITYPE tilei = tilej - tileii;
-        //Para recorrer en el orden de los for
+        // To iterate over tiles in the order of the fors
         ITYPE tilei = tileii;
         ITYPE i = tilei;
         ITYPE j = MIN(MAX(tilei + exclusionZone + 1, tilej), profileLength);
@@ -144,9 +147,9 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 #endif
         for (ITYPE jj = j; jj < MIN(tilej + maxTileWidth, profileLength); jj++)
         {
-          //Si i==j ==> Coordenada de la diagonal principal. Sólo se calcula el upper triangle.
-          //Si no, el upper triangle tb se calcula
-          //Triángulo superior
+          // If i==j ==> Main diagonal coordinate. Only upper triangle is computed.
+          // Else, upper triangle is also computed
+          // Upper triangle
           covariance = 0;
           for (ITYPE wi = 0; wi < windowSize; wi++)
             covariance += ((tSeries[i + wi] - means[i]) * (tSeries[jj + wi] - means[jj]));
@@ -155,7 +158,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 
           if (correlation > priv_profile_i[i - tilei])
           {
-            priv_profile_i[i - tilei] = correlation; //Actúo sobre el array privado
+            priv_profile_i[i - tilei] = correlation; // I act on the private array
             priv_profileIndex_i[i - tilei] = jj;
           }
           if (correlation > priv_profile_j[jj - tilej])
@@ -194,12 +197,11 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 #ifdef DEBUG
         cout << "Upper triangle | tid: " << tid << " tilei(ini,fin): " << iini << "," << ifin << " tilej(ini,fin): " << jini << "," << jfin << endl;
 #endif
-        /**************************************************************************/
         // Lower triangle
         if (tilei != tilej)
         {
-          //Si el tile difiere en sus coordenadas es un tile de interior y se calcula el lower triangle también
-          //Triángulo inferior
+          // If the tile differs in its coordinates it is an inner tile and the lower triangle is also computed
+          // Lower triangle
           ITYPE i = tilei + 1;
           ITYPE j = tilej;
 #ifdef DEBUG
@@ -208,9 +210,9 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 #endif
           for (ITYPE ii = i; ii < MIN(MIN(tilei + maxTileHeight, j - exclusionZone), profileLength); ii++)
           {
-            //Si i==j ==> Coordenada de la diagonal principal. Sólo se calcula el upper triangle.
-            //Si no, el upper triangle tb se calcula
-            //Triángulo superior
+            // If i==j ==> Main diagonal coordinate. Only upper triangle is computed.
+            // Else, upper triangle is also computed
+            // Upper triangle
             covariance = 0;
             for (ITYPE wi = 0; wi < windowSize; wi++)
               covariance += ((tSeries[ii + wi] - means[ii]) * (tSeries[j + wi] - means[j]));
@@ -219,7 +221,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
 
             if (correlation > priv_profile_i[ii - tilei])
             {
-              priv_profile_i[ii - tilei] = correlation; //Actúo sobre el array privado
+              priv_profile_i[ii - tilei] = correlation; // Act on the private array
               priv_profileIndex_i[ii - tilei] = j;
             }
             if (correlation > priv_profile_j[j - tilej])
@@ -261,7 +263,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
           cout << "Lower triangle | tid: " << tid << " tilei(ini,fin): " << iini << "," << ifin << " tilej(ini,fin): " << jini << "," << jfin << endl;
 #endif
         }
-        //Paso los datos de mi profile privado al global y lo pongo a -inf para el siguiente tile que procese
+        // Pass the data from my private profile to the global one and set it to -inf for the next tile I process
         for (ITYPE cnt = 0; cnt < maxTileWidth; cnt++)
         {
             if (priv_profile_i[cnt] > profile[cnt + tilei])
@@ -278,7 +280,7 @@ void scamp(vector<DTYPE> &tSeries, vector<DTYPE> &means, vector<DTYPE> &norms,
             priv_profile_j[cnt] = -numeric_limits<DTYPE>::infinity();
         }
 
-      } //Barrera implícita omp si no se pone nowait
+      } // Implicit omp barrier if nowait is not put
 #ifdef DEBUG
       cout << "-------------------------" << endl;
 #endif
@@ -313,7 +315,7 @@ int main(int argc, char *argv[])
     maxTileWidth = maxTileHeight = atoi(argv[3]);
     if (((maxTileWidth * sizeof(DTYPE)) % ALIGN) != 0)
     {
-      cout << "El tamaño del tile no es múltiplo del tamaño de línea de caché. La versión TM puede dar falsos conflictos." << endl;
+      cout << "Tile size is not a multiple of cache line size. TM version may give false conflicts." << endl;
     }
     numThreads = atoi(argv[4]);
     bool dumpProfile = (atoi(argv[5]) == 0) ? false : true;
@@ -335,8 +337,7 @@ int main(int argc, char *argv[])
     cout << endl;
     cout << "[>>] Reading File: " << inputfilename << "..." << endl;
 
-    /* ------------------------------------------------------------------ */
-    /* Read time series file */
+    // Read time series file
     tstart = chrono::steady_clock::now();
 
     fstream tSeriesFile(inputfilename, ios_base::in);
@@ -365,13 +366,11 @@ int main(int argc, char *argv[])
 
     // Auxiliary vectors
     vector<DTYPE> norms(profileLength), means(profileLength), df(profileLength), dg(profileLength);
-    //RIC Alineo los vectores del profile y profileIndex para que no haya conflictos por false sharing usando transacciones
-    //RIC Habrá que introducier un tamaño de ventana múltiplo de la línea de caché
-    //vector<DTYPE> profile(profileLength);
-    //vector<ITYPE> profileIndex(profileLength);
+    // Align profile and profileIndex vectors to avoid false sharing conflicts using transactions
+    // Will need to introduce a window size multiple of the cache line
     DTYPE *profile = NULL;
     ITYPE *profileIndex = NULL;
-    ALIGNED_ARRAY_NEW(DTYPE, profile, profileLength + ALIGN, ALIGN); //Meto profileLength+ALIGN para tener padding por si acaso y evitar false sharing con TM
+    ALIGNED_ARRAY_NEW(DTYPE, profile, profileLength + ALIGN, ALIGN); // I put profileLength+ALIGN to have padding just in case and avoid false sharing with TM
     ALIGNED_ARRAY_NEW(ITYPE, profileIndex, profileLength + ALIGN, ALIGN);
 
     //Profile initialization
@@ -399,30 +398,26 @@ int main(int argc, char *argv[])
     cout << "------------------------------------------------------------" << endl;
     cout << endl;
 
-    /***************** Preprocess ******************/
     cout << "[>>] Preprocessing..." << endl;
     tstart = chrono::steady_clock::now();
     preprocess(tSeries, means, norms, df, dg);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] Preprocessing Time:         " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
-    /******************** SCAMP ********************/
     cout << "[>>] Executing SCAMP..." << endl;
     tstart = chrono::steady_clock::now();
     scamp(tSeries, means, norms, df, dg, profile, profileIndex);
     tend = chrono::steady_clock::now();
     telapsed = tend - tstart;
     cout << "[OK] SCAMP Time:              " << setprecision(2) << fixed << telapsed.count() << " seconds." << endl;
-    /***********************************************/
 
     cout << "[>>] Saving result: " << outfilename << " ..." << endl;
     fstream statsFile(outfilename, ios_base::out);
     statsFile << "# Time (s)" << endl;
     statsFile << setprecision(6) << fixed << telapsed.count() << endl;
-    // Al tamaño del profile y del profileIndex se le suma el tamaño de los arrays privados para el tile (que es maxTileWidth*4arrays*sizeof(DTYPE))
-    // multiplicado por numthreads
+    // To the size of profile and profileIndex the size of the private arrays for the tile is added (which is maxTileWidth*4arrays*sizeof(DTYPE))
+    // multiplied by numthreads
     statsFile << "# Mem(KB) tseries,means,norms,df,dg,profile,profileIndex,Total(MB)" << endl;
     statsFile << setprecision(2) << fixed <<(sizeof(DTYPE) * tSeries.size()) / 1024.0f << "," << (sizeof(DTYPE) * means.size()) / 1024.0f << "," <<
                  (sizeof(DTYPE) * norms.size()) / 1024.0f << "," << (sizeof(DTYPE) * df.size()) / 1024.0f << "," <<

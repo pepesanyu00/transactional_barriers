@@ -1,40 +1,49 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+# ******************************************************************************
+#  * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+#  *          Eladio Gutierrez (eladio@uma.es)
+#  *          Ricardo Quislant (quislant@uma.es)
+#  *          Oscar Plata (oplata@uma.es)
+#  *
+#  * University: Dept. of Computer Architecture, University of Malaga,
+#  *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+#  ******************************************************************************
 import sys
-import os #Para quitar directorios y extensiones de un path
-import glob #Para obtner una lista de archivos de un path con wildcards
-import numpy as np #Package for scientific computing with Python
-import matplotlib.pyplot as plt #Librería gráfica
-from subprocess import call #Para llamar a un comando del shell
+import os # To remove directories and extensions from a path
+import glob # To get a list of files from a path with wildcards
+import numpy as np # Package for scientific computing with Python
+import matplotlib.pyplot as plt # Graphic library
+from subprocess import call # To call a shell command
 
 
-# Esta función lee los archivos en la lista de archivos que se genera a partir
-# de filePath (que tendrá wildcards) y devuelve la media del tiempo de ejecución
+# This function reads the files in the file list generated from
+# filePath (which will have wildcards) and returns the average execution time
 def readTimeAvg(filePath):
 	fileList = glob.glob(filePath)
 	timeAcc = 0.0
 	n = len(fileList)
 	if n == 0:
-		print("No hay archivos %s" % filePath)
+		print("There are no files %s" % filePath)
 		return timeAcc
 	for file in fileList:
 		f = open(file, 'r')
-		tmp = f.readline() # Leo el primer comentario
-		timeAcc = timeAcc + float(f.readline()) # Leo el tiempo y lo paso a float
+		tmp = f.readline() # I read the first comment
+		timeAcc = timeAcc + float(f.readline()) # I read the time and pass it to float
 		f.close()
 	return timeAcc/len(fileList)
 
-#Parseo los argumentos
+# Parse arguments
 if len(sys.argv) == 4:
   tseries = sys.argv[1]
-  # Le quito el directorio y el .txt si los tiene
+  # Remove the directory and the .txt if it has them
   tseries = os.path.basename(tseries)
   tseries = os.path.splitext(tseries)[0]
   w = int(sys.argv[2])
   legend = int(sys.argv[3])
   print("Plotting results for tseries %s with window size %d and %d legend ..." % (tseries, w, legend))
 else:
-  print("Uso: ./plotSpeedup.py timeseries windowSize legend")
+  print("Usage: ./plotSpeedup.py timeseries windowSize legend")
   exit(-1)
 
 
@@ -55,17 +64,17 @@ l=(128, 512, 2048, 8192) # 8192 16384
 numThreads = (1, 2, 4, 8, 16, 32, 64, 96)
 x = range(1,len(numThreads)+1)
 
-lfs = 20 #33 #label font size
-ms = 2   #marker size
+lfs = 20 # 33 # label font size
+ms = 2   # marker size
 markers = ('o', '^', 'v', 's', '*', 'p', 'h', '<', '>', '8', 'H', 'D', 'd', None)
 mksize = (ms*6,ms*7,ms*7,ms*6,ms*8,ms*7,ms*6,ms*7,ms*6,ms*6,ms*6,ms*6,ms*6)
 #colors = plt.cm.Set1(range(ini,fin,int((fin-ini)/len(linesv)) ))
-set1 = plt.cm.get_cmap('Set1') #Obtengo el color map
+set1 = plt.cm.get_cmap('Set1') # I get the color map
 
 
 
 
-#Extraigo el tiempo del secuencial (se tomará para el secuencial el scamp no-vect con 1 hilo)
+# Extract the time of the sequential (the non-vect scamp with 1 thread will be taken for the sequential)
 for i in l:
   linesv = [
             ["scamp"    , "scamp_%s_w%d_t%d_*"],
@@ -73,17 +82,17 @@ for i in l:
             ["SpecTilesDiag L=" + str(i) , "specScampTilesDiag_%s_w%d_l"+str(i)+"_t%d_*"],
             ["scampUnprot L=" + str(i) , "scampTilesUnprot_%s_w%d_l"+str(i)+"_t%d_*"],]
 
-  colors = set1(np.linspace(0.0,1,len(linesv))) #Elijo los colores (cambiar ini y fin para variar los colores)
-                                                #En blanco y negro (hago la media)
+  colors = set1(np.linspace(0.0,1,len(linesv))) # Choose the colors (change ini and fin to vary the colors)
+                                                # In black and white (I do the mean)
 
   tSeq = readTimeAvg(direc + (linesv[0][1]%(tseries,w,1)))
   for j in range(len(linesv)):
     timePerTh = []
-    # Obtengo el tiempo para cada número de hilos
+    # I get the time for each number of threads
     for d in numThreads:
       timePerTh.append(readTimeAvg(direc + (linesv[j][1]%(tseries,w,d))))
     print("timePerTh:"+str(timePerTh))
-    #Convierto las listas en arrays para hacer cálculos más fácilmente (np.array)
+    # Transform lists into arrays to do calculations more easily (np.array)
     timePerTh = np.array(timePerTh)
     plt.plot(x, tSeq/timePerTh, color=colors[j], label=linesv[j][0], linewidth=ms,
             marker=markers[j], markeredgecolor=colors[j], markersize=mksize[j],

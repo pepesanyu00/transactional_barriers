@@ -1,3 +1,12 @@
+/******************************************************************************
+ * Authors: Jose Sanchez-Yun (pepesy00@uma.es)
+ *          Eladio Gutierrez (eladio@uma.es)
+ *          Ricardo Quislant (quislant@uma.es)
+ *          Oscar Plata (oplata@uma.es)
+ *
+ * University: Dept. of Computer Architecture, University of Malaga,
+ *             Bulevar Louis Pasteur, 35, Malaga, 29071, Andalusia, Spain
+ ******************************************************************************/
 #ifndef STATS_H_
 #define STATS_H_
 
@@ -12,47 +21,47 @@
 #include <immintrin.h>
 #include "barriers.h"
 
-// MACROS DEFINIDAS EN BARRIERS.H
+// MACROS DEFINED IN BARRIERS.H
 //#define CACHE_BLOCK_SIZE 64
 //#define LOCK_TAKEN 0xFF
 
 
 
-// Estructura para guardar las estadísticas
+// Structure to save statistics
 struct Stats
 {
-  //Las estadísticas se actualizan fuera de transacción, pero se reservan con malloc (¿podrían caer cerca de datos compartidos accedidos dentro de transacción y compartir línea de caché?)
-  volatile char pad1[CACHE_BLOCK_SIZE];  //Pads para que no haya false sharing (que no coincidan xabortCount de un thread con retryFCount de otro en un bloque cache)
-  unsigned long int xabortCount;         //Número total de abortos
-  unsigned long int explicitAborts;      //Número de llamadas a XABORT en el código
-  unsigned long int explicitAbortsSubs;  //Número de abortos explícitos por subscripción de lock
-  unsigned long int retryAborts;         //Abortos para los que el hardware piensa que debemos reintentar
-  unsigned long int retryConflictAborts; //Abortos para los que el hardware piensa que debemos reintentar
-  unsigned long int retryCapacityAborts; //Abortos para los que el hardware piensa que debemos reintentar
-  unsigned long int conflictAborts;      //Abortos por conflicto
-  unsigned long int capacityAborts;      //Abortos por capacidad
-  unsigned long int debugAborts;         //Abortos por breakpoint de debugger
-  unsigned long int nestedAborts;        //Abortos dentro de una transacción anidada
-  unsigned long int eaxzeroAborts;       //Abortos con eax = 0
-  unsigned long int xcommitCount;        //Número de commits
-  unsigned long int fallbackCount;       //Número de fallbacks
-  unsigned long int retryCCount;         //Número de retries de las que commitan
-  unsigned long int retryFCount;         //Número de retries de las que entran en fallback
-  unsigned long int xbeginCount;         //Número de transacciones que se han abierto
+  //Statistics are updated outside the transaction, but are reserved with malloc (could they fall near shared data accessed within the transaction and share a cache line?)
+  volatile char pad1[CACHE_BLOCK_SIZE];  //Pads to avoid false sharing (so that xabortCount from one thread does not match retryFCount from another in a cache block)
+  unsigned long int xabortCount;         //Total number of aborts
+  unsigned long int explicitAborts;      //Number of calls to XABORT in the code
+  unsigned long int explicitAbortsSubs;  //Number of explicit aborts due to lock subscription
+  unsigned long int retryAborts;         //Aborts for which the hardware thinks we should retry
+  unsigned long int retryConflictAborts; //Aborts for which the hardware thinks we should retry
+  unsigned long int retryCapacityAborts; //Aborts for which the hardware thinks we should retry
+  unsigned long int conflictAborts;      //Conflict aborts
+  unsigned long int capacityAborts;      //Capacity aborts
+  unsigned long int debugAborts;         //Debugger breakpoint aborts
+  unsigned long int nestedAborts;        //Aborts within a nested transaction
+  unsigned long int eaxzeroAborts;       //Aborts with eax = 0
+  unsigned long int xcommitCount;        //Number of commits
+  unsigned long int fallbackCount;       //Number of fallbacks
+  unsigned long int retryCCount;         //Number of retries of those that commit
+  unsigned long int retryFCount;         //Number of retries of those that enter fallback
+  unsigned long int xbeginCount;         //Number of transactions that have been opened
   volatile char pad2[CACHE_BLOCK_SIZE];
 };
 
 extern struct Stats **stats;
 
 
-//Funciones para el fichero de estadísticas
+//Functions for the statistics file
 int statsFileInit(int argc, char **argv, long thCount, long xCount);
 int dumpStats(double time);
 
-// Funciones de profile de estadísticas (hechas inline para mejorar el rendimiento)
+// Statistics profile functions (made inline to improve performance)
 
 
-// Función para determinar el tipo de aborto
+// Function to determine the type of abort
 inline unsigned long profileAbortStatus(unsigned long eax, long thread, long xid)
 {
   stats[thread][xid].xabortCount++;
@@ -92,22 +101,22 @@ inline unsigned long profileAbortStatus(unsigned long eax, long thread, long xid
   }
   if (eax == 0)
   {
-    //Todos los bits a cero (puede ocurrir por una llamada a CPUID u otro cosa)
-    //Véase Section 8.3.5 RTM Abort Status Definition del Intel Architecture
+    //All bits at zero (can occur due to a call to CPUID or something else)
+    //See Section 8.3.5 RTM Abort Status Definition of the Intel Architecture
     //Instruction Set Extensions Programming Reference (2012))
     stats[thread][xid].eaxzeroAborts++;
   }
   return 0;
 }
 
-// Función para indicar un commit
+// Function to indicate a commit
 inline void profileCommit(long thread, long xid, long retries)
 {
   stats[thread][xid].xcommitCount++;
   stats[thread][xid].retryCCount += retries;
 }
 
-// Funcion para indicar un fallback
+// Function to indicate a fallback
 inline void profileFallback(long thread, long xid, long retries)
 {
   stats[thread][xid].fallbackCount++;
