@@ -222,14 +222,6 @@ The `Makefile` and scripts in this repository encode the baseline configuration 
 - The implementations focus on **throughput and scalability**, not on generic usability or error handling.
 - The set of time series included in `timeseries/` is not exhaustive; you can add your own datasets following the same format (usually one value per line).
 
-## How to Cite
-
-If you use this code or build upon its ideas in academic work, please consider citing the repository. A generic citation entry might look like:
-
-> Author(s), *Transactional Barriers for Matrix Profile Algorithms*, experimental code repository, `https://github.com/pepesanyu00/transactional_barriers`.
-
-You can adapt the exact reference format to the requirements of your venue (conference, journal, thesis, etc.) and include additional bibliographic details if available.
-
 ## Contact and Contributions
 
 This repository is primarily maintained as part of a research effort on transactional memory and time series analytics.
